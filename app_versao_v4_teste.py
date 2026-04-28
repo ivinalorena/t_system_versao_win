@@ -11,8 +11,9 @@ import itertools
 from datetime import datetime
 import matplotlib.pyplot as plt
 from PIL import Image
-
 from scipy.stats import shapiro
+from auth import render_login_page, render_logout_button
+
 
 
 st.markdown("""
@@ -52,6 +53,10 @@ div[data-testid="stRadio"] div[role="radiogroup"] {
 # Configuração DA PÁGINA  (TEM QUE SER A PRIMEIRA COISA do Streamlit)
 # =============================================
 st.set_page_config(page_title="TaguchiApp", layout="wide")
+# Logo após st.set_page_config()
+if not render_login_page():
+    st.stop()
+
 
 logo = Image.open("assets/logo_taguchiapp.png")
 
@@ -77,6 +82,7 @@ with col2:
         """,
         unsafe_allow_html=True
     )
+    render_logout_button()
     
 # Linha separadora (opcional)
 st.markdown("---")
