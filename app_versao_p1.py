@@ -126,13 +126,14 @@ else:
 # ============================
 def built_in_catalog():
     return {
-        "L4(2^3)"     : {"cols2": 3,  "cols3": 0,  "n": 4},
-        "L8(2^7)"     : {"cols2": 7,  "cols3": 0,  "n": 8},
-        "L9(3^4)"     : {"cols2": 0,  "cols3": 4,  "n": 9},
-        "L12(2^11)"   : {"cols2": 11, "cols3": 0,  "n": 12},
-        "L16(2^15)"   : {"cols2": 15, "cols3": 0,  "n": 16},
-        "L18(2^1 3^7)": {"cols2": 1,  "cols3": 7,  "n": 18},
-        "L27(3^13)"   : {"cols2": 0,  "cols3": 13, "n": 27},
+        "L4(2^3)"     : {"cols2": 3,  "cols3": 0,  "cols4": 0, "n": 4},
+        "L8(2^7)"     : {"cols2": 7,  "cols3": 0,  "cols4": 0, "n": 8},
+        "L9(3^4)"     : {"cols2": 0,  "cols3": 4,  "cols4": 0, "n": 9},
+        "L12(2^11)"   : {"cols2": 11, "cols3": 0,  "cols4": 0, "n": 12},
+        "L16(2^15)"   : {"cols2": 15, "cols3": 0,  "cols4": 0, "n": 16},
+        "L16(4^5)"    : {"cols2": 0,  "cols3": 0,  "cols4": 5, "n": 16},
+        "L18(2^1 3^7)": {"cols2": 1,  "cols3": 7,  "cols4": 0, "n": 18},
+        "L27(3^13)"   : {"cols2": 0,  "cols3": 13, "cols4": 0, "n": 27},
     }
 
 
@@ -250,6 +251,26 @@ def oa_from_name(name: str) -> np.ndarray:
             [2,3,1,2,3,1,2,2,3,1,1,2,3],
         ], dtype=int)
         return arr27 - 1
+
+    if name == "L16(4^5)":
+        return np.array([
+            [0,0,0,0,0],
+            [0,1,1,1,1],
+            [0,2,2,2,2],
+            [0,3,3,3,3],
+            [1,0,1,2,3],
+            [1,1,0,3,2],
+            [1,2,3,0,1],
+            [1,3,2,1,0],
+            [2,0,2,3,1],
+            [2,1,3,2,0],
+            [2,2,0,1,3],
+            [2,3,1,0,2],
+            [3,0,3,1,2],
+            [3,1,2,0,3],
+            [3,2,1,3,0],
+            [3,3,0,2,1],
+        ], dtype=int)
 
     # se nada casou:
     raise RuntimeError(f"OA '{name}' não disponível.")
@@ -374,14 +395,23 @@ def section_factors_and_oa():
                     continue
 
                 if mesmo_numero_niveis:
-                    if niveis_unicos[0] == 2 and specs['cols2'] >= num_fatores:
+                    if niveis_unicos[0] == 2 and specs.get('cols2', 0) >= num_fatores:
                         matrizes_candidatas.append((nome, specs))
-                    elif niveis_unicos[0] == 3 and specs['cols3'] >= num_fatores:
+                    elif niveis_unicos[0] == 3 and specs.get('cols3', 0) >= num_fatores:
                         matrizes_candidatas.append((nome, specs))
+                    elif niveis_unicos[0] == 4 and specs.get('cols4', 0) >= num_fatores:
+                        matrizes_candidatas.append((nome, specs))
+                
                 else:
                     f2 = sum(1 for n in niveis_por_fator if n == 2)
                     f3 = sum(1 for n in niveis_por_fator if n == 3)
-                    if specs['cols2'] >= f2 and specs['cols3'] >= f3:
+                    f4 = sum(1 for n in niveis_por_fator if n == 4)  # 🔥 NOVO
+                
+                    if (
+                        specs.get('cols2', 0) >= f2 and
+                        specs.get('cols3', 0) >= f3 and
+                        specs.get('cols4', 0) >= f4
+                    ):
                         matrizes_candidatas.append((nome, specs))
 
             matrizes_candidatas.sort(key=lambda x: x[1]['n'])
@@ -459,9 +489,9 @@ def section_factors_and_oa():
             st.error(f"❌ Erro ao processar o arquivo: {str(e)}")
         st.markdown("---")
 
-def compute_anova_sn(df_effects: pd.DataFrame, factor_cols: list[str], sn_col: str):
+def compute_anova_sn(_df_effects: pd.DataFrame, factor_cols: list[str], sn_col: str):
     # Vetor de S/N por ensaio
-    y_sn = df_effects[sn_col].to_numpy(dtype=float)
+    y_sn = _df_effects[sn_col].to_numpy(dtype=float)
     N = len(y_sn)
 
     if N <= 1:
@@ -477,7 +507,7 @@ def compute_anova_sn(df_effects: pd.DataFrame, factor_cols: list[str], sn_col: s
     df_factors_sum = 0
 
     for fac in factor_cols:
-        g = df_effects.groupby(df_effects[fac].astype(str))[sn_col]
+        g = _df_effects.groupby(_df_effects[fac].astype(str))[sn_col]
         means = g.mean()
         counts = g.size()
 
@@ -670,13 +700,13 @@ def compute_anova_sn(df_effects: pd.DataFrame, factor_cols: list[str], sn_col: s
 @st.cache_data(show_spinner=False)
 def compute_anova_sn_cached(_df_effects, factor_cols_tuple, sn_col):
     return compute_anova_sn(
-        df_effects=_df_effects,
+        _df_effects=_df_effects,
         factor_cols=list(factor_cols_tuple),
         sn_col=sn_col,
     )
 ###
 @st.cache_data(show_spinner=False)
-def compute_regressao_multipla_cached(_df_plan, factor_cols_tuple, _mean_y, has_scipy=True):
+def compute_regressao_multipla_cached(_df_plan, factor_cols_tuple, mean_y, has_scipy=True):
     """
     Ajuste da regressão múltipla com cache.
     Retorna tudo o que a aba de regressão precisa para exibir resultados.
@@ -684,12 +714,12 @@ def compute_regressao_multipla_cached(_df_plan, factor_cols_tuple, _mean_y, has_
     factor_cols = list(factor_cols_tuple)
 
     # y (resposta): valores do problema
-    y = np.asarray(_mean_y, dtype=float).reshape(-1, 1)
+    y = np.asarray(mean_y, dtype=float).reshape(-1, 1)
     n = y.shape[0]
 
     # X: fatores (dummies para categóricos), com intercepto
     X_raw = _df_plan[factor_cols].copy()
-    X_num = X_raw.apply(pd.to_numeric, errors="coerce")
+    X_num = X_raw.apply(lambda x: pd.to_numeric(x, errors='coerce'))
     X_dum = pd.get_dummies(X_num, drop_first=True, dtype=float)
     X_dum.insert(0, "Constante", 1.0)
 
@@ -828,15 +858,13 @@ def predicao_usuario_regressao(
 
     # ----------------- Predição do ponto (ŷ) -----------------
     X_new = _build_X_row_from_levels(levels, factor_cols, X_dum_cols)
-    result_new = X_new @ beta_hat
-    y_hat_new = float(np.asarray(result_new).squeeze())
+    y_hat_new = float(X_new @ beta_hat)
 
     # ----------------- IC 95% da média -----------------
     alpha = 0.05
     t_crit = t_dist.ppf(1 - alpha/2, df=df_res) if df_res > 0 else np.nan
 
-    v_mean_result = sigma2_hat * (X_new @ XtX_inv @ X_new.T)
-    v_mean = float(np.asarray(v_mean_result).squeeze())
+    v_mean = float(sigma2_hat * (X_new @ XtX_inv @ X_new.T))
     se_mean = np.sqrt(max(v_mean, 0.0))
 
     ic_low = y_hat_new - t_crit * se_mean if np.isfinite(t_crit) else np.nan
@@ -901,11 +929,9 @@ def predicao_usuario_regressao(
             rows = []
             for levels_i in combos:
                 X_i = _build_X_row_from_levels(levels_i, factor_cols, X_dum_cols)
-                result_i = X_i @ beta_hat
-                y_i = float(np.asarray(result_i).squeeze())
+                y_i = float(X_i @ beta_hat)
 
-                v_i_result = sigma2_hat * (X_i @ XtX_inv @ X_i.T)
-                v_i = float(np.asarray(v_i_result).squeeze())
+                v_i = float(sigma2_hat * (X_i @ XtX_inv @ X_i.T))
                 se_i = np.sqrt(max(v_i, 0.0))
 
                 ic_l = y_i - t_crit * se_i if np.isfinite(t_crit) else np.nan
@@ -1020,16 +1046,14 @@ def ponto_otimo_regressao(
 
     # 2) Predição via regressão nesse ponto ótimo
     X_new = _build_X_row_from_levels(opt_levels, factor_cols, X_dum_cols)  # shape (1,p)
-    result = X_new @ beta_hat
-    y_hat = float(np.asarray(result).squeeze())
+    y_hat = float(X_new @ beta_hat)
 
-    st.session_state["Y_hat_reg_opt"] = y_hat
+    st.session_state["Y_hat_reg_opt"] = float(np.asarray(y_hat).squeeze())
 
     # 3) IC 95% da média e IP 95% individual
     t_crit = t_dist.ppf(1 - alpha/2, df=df_res) if (df_res > 0) else np.nan
 
-    v_mean_result = sigma2_hat * (X_new @ XtX_inv @ X_new.T)
-    v_mean = float(np.asarray(v_mean_result).squeeze())
+    v_mean = float(sigma2_hat * (X_new @ XtX_inv @ X_new.T))
     se_mean = float(np.sqrt(max(v_mean, 0.0)))
 
     ic_low = y_hat - t_crit * se_mean if np.isfinite(t_crit) else np.nan
@@ -1232,7 +1256,7 @@ def render_confirmacao_regressao_sem_upload(
         st.warning("⚠️ O ensaio de confirmação salvo não contém valores numéricos válidos.")
         return
 
-    y_obs = float(np.asarray(np.mean(y_conf_vals)).squeeze())
+    y_obs = float(np.mean(y_conf_vals))
 
     st.markdown("---")
     st.markdown("**2️⃣ Estatísticas descritivas do ensaio de confirmação**")
@@ -1255,8 +1279,7 @@ def render_confirmacao_regressao_sem_upload(
     # predição da regressão no mesmo ponto do ensaio (conf_levels)
     try:
         X_new = _build_X_row_from_levels(conf_levels, factor_cols, X_dum_cols)
-        result = X_new @ beta_hat
-        y_hat_reg = float(np.asarray(result).squeeze())
+        y_hat_reg = float(X_new @ beta_hat)
     except Exception as e:
         y_hat_reg = float("nan")
         st.warning(f"Não foi possível calcular a predição da regressão no ponto do ensaio: {e}")
@@ -1332,7 +1355,7 @@ def render_confirmacao_regressao_sem_upload(
 
 
 
-def _predict_combo(level_dict, mean_y, df_effects, sn_col, per_factor_tables, factor_cols, df_plan):
+def _predict_combo(level_dict, mean_y, _df_effects, sn_col, per_factor_tables, factor_cols, df_plan):
     # Y
     y_by_run = np.asarray(mean_y, dtype=float)
     Y_bar = float(np.nanmean(y_by_run))
@@ -1347,7 +1370,7 @@ def _predict_combo(level_dict, mean_y, df_effects, sn_col, per_factor_tables, fa
     y_pred = float(Y_bar + np.nansum(efeitos_y))
 
     # S/N
-    sn_bar = float(df_effects[sn_col].mean())
+    sn_bar = float(_df_effects[sn_col].mean())
     efeitos_sn = []
 
     for fac in factor_cols:
@@ -1361,7 +1384,7 @@ def _predict_combo(level_dict, mean_y, df_effects, sn_col, per_factor_tables, fa
 
         if pd.isna(media_sn):
             mask = (df_plan[fac].astype(str) == nivel)
-            media_sn = float(df_effects.loc[mask, sn_col].mean())
+            media_sn = float(_df_effects.loc[mask, sn_col].mean())
 
         efeitos_sn.append(media_sn - sn_bar)
 
@@ -1376,7 +1399,7 @@ def render_exportacoes_predicao(
     eta_hat,
     var_label,
     mean_y,
-    df_effects,
+    _df_effects,
     sn_col,
     per_factor_tables,
     factor_cols,
@@ -1389,7 +1412,7 @@ def render_exportacoes_predicao(
         y_pred_one, eta_pred_one = (Y_hat, eta_hat)
     else:
         y_pred_one, eta_pred_one = _predict_combo(
-            row_dict, mean_y, df_effects, sn_col, per_factor_tables, factor_cols, df_plan
+            row_dict, mean_y, _df_effects, sn_col, per_factor_tables, factor_cols, df_plan
         )
 
     df_pred_one = pd.DataFrame([{
@@ -1409,7 +1432,7 @@ def render_exportacoes_predicao(
     for combo in product(*[levels_map[fac] for fac in factor_cols]):
         combo_dict = {fac: level for fac, level in zip(factor_cols, combo)}
         y_pred, eta_pred = _predict_combo(
-            combo_dict, mean_y, df_effects, sn_col, per_factor_tables, factor_cols, df_plan
+            combo_dict, mean_y, _df_effects, sn_col, per_factor_tables, factor_cols, df_plan
         )
         rows.append({
             **combo_dict,
@@ -1450,7 +1473,7 @@ def estimativas_ponto_otimo(
     per_factor_tables,
     var_label,
     mean_y,
-    df_effects,
+    _df_effects,
     sn_col,
     opt_table=None,   # opcional: se você quiser reaproveitar a tabela do "nível ótimo"
 ):
@@ -1569,7 +1592,7 @@ def estimativas_ponto_otimo(
     # --------- COLUNA S/N ---------
     with colSN:
         try:
-            grand_mean = float(df_effects[sn_col].mean())
+            grand_mean = float(_df_effects[sn_col].mean())
         except Exception:
             grand_mean = float("nan")
 
@@ -1696,7 +1719,7 @@ def render_ensaio_confirmacao(
     df_plan,
     var_label,
     mean_y,
-    df_effects,
+    _df_effects,
     sn_col,
     per_factor_tables,
     sn_tipo,
@@ -1802,7 +1825,7 @@ def render_ensaio_confirmacao(
                 if vals.size == 0:
                     st.error("❌ Não há valores numéricos válidos na matriz de confirmação.")
                 else:
-                    y_conf_vals = np.asarray(vals, dtype=float)
+                    y_conf_vals = vals
                     st.success(f"✅ {len(y_conf_vals)} valores de {var_label} carregados para o ensaio de confirmação.")
                     st.dataframe(pd.DataFrame({var_label: y_conf_vals}), use_container_width=True, hide_index=True)
                     st.info(f"A razão S/N do ensaio de confirmação será calculada com o mesmo tipo: **{sn_tipo}**.")
@@ -1836,7 +1859,7 @@ def render_ensaio_confirmacao(
         y_pred, sn_pred = _predict_combo(
             conf_levels,
             mean_y=mean_y,
-            df_effects=df_effects,
+            _df_effects=_df_effects,
             sn_col=sn_col,
             per_factor_tables=per_factor_tables,
             factor_cols=factor_cols,
@@ -2147,12 +2170,7 @@ def section_results():
         SNR = []
         for row in reps:
             vals = row[~np.isnan(row)]
-            if sn_tipo == "Maior é melhor":
-                SNR.append(sn_larger(vals))
-            elif sn_tipo == "Menor é melhor":
-                SNR.append(sn_smaller(vals))
-            else:
-                SNR.append(sn_nominal(vals, alvo_nominal))
+            SNR.append(compute_snr(vals, sn_tipo, alvo_nominal))        
 
         # 🔹 trabalha em uma cópia, não no df_join “de fora”
         df_local = df_join.copy()
@@ -3092,7 +3110,6 @@ def section_results():
                 )
 
 
-    
 
     def mostrar_regra_delta():
         st.subheader("📐 A regra Delta por fator")
@@ -3241,7 +3258,7 @@ Em linha gerais, o valor de $\Delta$ fornece uma medida comparativa de influênc
         # ----------------- Entrada do usuário -----------------
         levels = {}
         for f in factor_cols:
-            lvls = sorted(df_plan[f].astype(str).unique(), key=lambda z: int(z))
+            lvls = sorted(df_plan[f].astype(str).unique(),key=lambda z: float(str(z).strip()))
             levels[f] = st.selectbox(f"Nível para {f}", lvls)
 
         mean_y = df_join["_Ymean"].values  # garanta isso no escopo
@@ -3345,7 +3362,7 @@ Em linha gerais, o valor de $\Delta$ fornece uma medida comparativa de influênc
             eta_hat=eta_hat,
             var_label=var_label,
             mean_y=mean_y,
-            df_effects=df_effects,
+            _df_effects=df_effects,
             sn_col=sn_col,
             per_factor_tables=per_factor_tables,
             factor_cols=factor_cols,
@@ -3360,7 +3377,7 @@ Em linha gerais, o valor de $\Delta$ fornece uma medida comparativa de influênc
             per_factor_tables=per_factor_tables,
             var_label=var_label,
             mean_y=mean_y,
-            df_effects=df_effects,
+            _df_effects=df_effects,
             sn_col=sn_col,
             opt_table=opt_table if "opt_table" in globals() else None,
         )
@@ -3510,7 +3527,7 @@ Em linha gerais, o valor de $\Delta$ fornece uma medida comparativa de influênc
         df_effects = df_join.copy()
         sn_col = "_SN"  # porque você criou df_join["_SN"] no calcular_sn()
         
-        anova_df, meta = compute_anova_sn(df_effects=df_effects, factor_cols=factor_cols, sn_col=sn_col)
+        anova_df, meta = compute_anova_sn(_df_effects=df_effects, factor_cols=factor_cols, sn_col=sn_col)
         
         if anova_df is None:
             st.error("❌ " + meta.get("error", "Erro ao calcular ANOVA."))
@@ -4099,7 +4116,7 @@ com inflacionamento dos erros-padrão e redução da confiabilidade dos testes d
             reg = compute_regressao_multipla_cached(
                 _df_plan=df_plan,
                 factor_cols_tuple=tuple(factor_cols),
-                _mean_y=tuple(np.asarray(mean_y, dtype=float).tolist()),
+                mean_y=tuple(np.asarray(mean_y, dtype=float).tolist()),
                 has_scipy=HAS_SCIPY
             )
         
@@ -4917,7 +4934,7 @@ com inflacionamento dos erros-padrão e redução da confiabilidade dos testes d
             df_plan=df_plan,
             var_label=var_label,
             mean_y=mean_y,
-            df_effects=df_join,
+            _df_effects=df_join,
             sn_col="_SN",
             per_factor_tables=per_factor,
             sn_tipo=sn_tipo,
